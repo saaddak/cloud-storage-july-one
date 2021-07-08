@@ -9,7 +9,7 @@ public class ChatApp extends Application {
     @Override
     public void start(Stage primaryStage) throws Exception {
 
-        System.out.println(getClass().getResource("" + "chat.fxml"));
+        System.out.println(getClass().getResource("" + "chat.fxml")); // почему null?
 
         Parent parent = FXMLLoader.load(getClass().getResource("chat.fxml"));
         primaryStage.setScene(new Scene(parent));
