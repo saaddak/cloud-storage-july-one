@@ -1,71 +1,83 @@
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.net.Socket;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.ResourceBundle;
+import java.util.stream.Collectors;
 
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.Initializable;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
+import model.CopyRequest;
+import model.CopyResponse;
+import model.ListResponse;
 
 public class ChatController implements Initializable {
-    private String root = "client/clientFiles";
-    private DataInputStream is;
-    private DataOutputStream os;
-    private byte[] buffer;
-    private final int BUFFER_SIZE = 256;
-    private final int SERVER_PORT = 8189;
 
-    public ListView<String> listView;
-
+    public ListView<String> clientListView;
+    public ListView<String> serverListView;
     public TextField statusBar;
+    private final String clientRoot = "client/clientFiles";
+    private final Path clientPath = Paths.get(clientRoot);
+
+    private final String serverRoot = "server/serverFiles";
+    //private final Path serverPath = Paths.get(serverRoot);
+
+    private NettyNetwork network;
 
     public void send(ActionEvent actionEvent) throws IOException {
-        String fileName = listView.getSelectionModel().getSelectedItem();
-        Path filePath = Paths.get(root, fileName);
+        /*statusBar.clear();
+        statusBar.setText();*/
+        String selectedFile = clientRoot + "/" + clientListView.getSelectionModel().getSelectedItem();
+        Path selectedPath = Paths.get(selectedFile);
+        Path targetPath = Paths.get(serverRoot + "/" + clientListView.getSelectionModel().getSelectedItem());
+        //Files.copy(selectedPath, (new File(serverRoot + "/" + clientListView.getSelectionModel().getSelectedItem())).toPath());
+        network.writeMessage(new CopyRequest());
+    }
 
-        System.out.println(filePath.toString());
-
-        long size = Files.size(filePath);
-        os.writeUTF(fileName);
-        os.writeLong(size);
-        Files.copy(filePath, os);
-        os.flush();
-        statusBar.setText("Файл: " + fileName + " отправлен на сервер.");
+    public void refresh() throws IOException {
+        List<String> names = Files.list(clientPath)
+                .map(p -> p.getFileName().toString())
+                .collect(Collectors.toList());
+        clientListView.getItems().clear();
+        clientListView.getItems().addAll(names);
     }
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
-        buffer = new byte[BUFFER_SIZE];
+
         try {
-            File dir = new File(root);
-            listView.getItems().clear();
-            listView.getItems().addAll(dir.list());
-            Socket socket = new Socket("localhost", SERVER_PORT);
-            is = new DataInputStream(socket.getInputStream());
-            os = new DataOutputStream(socket.getOutputStream());
-            Thread readThread = new Thread(() -> {
-                try {
-                    while (true) {
-                        String status = is.readUTF();
-                        Platform.runLater(() -> statusBar.setText(status));
-                    }
-                } catch (Exception e) {
-                    System.err.println("Ошибка в процессе чтения.");
-                }
-            });
-            readThread.setDaemon(true);
-            readThread.start();
-        } catch (Exception e) {
+            refresh();
+        } catch (IOException e) {
             e.printStackTrace();
         }
+
+        network = new NettyNetwork(command -> {
+            ListResponse files = (ListResponse) command;
+            switch (command.getType()) {
+                case LIST_RESPONSE:
+                    Platform.runLater(() -> {
+                        serverListView.getItems().clear();
+                        serverListView.getItems().addAll(files.getNames());
+                    });
+                    break;
+                case COPY_RESPONSE:
+
+                    // здесь должна быть логика копирования
+
+                    Platform.runLater(() -> {
+                        serverListView.getItems().clear();
+                        serverListView.getItems().addAll(files.getNames());
+                    });
+                    break;
+            }
+        });
     }
 
 }
